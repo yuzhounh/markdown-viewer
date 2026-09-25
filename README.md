@@ -24,7 +24,7 @@ MDViewer 是一个专为 Windows 设计的轻量 Markdown 阅读器：交互参�
 - 自动跟随 Windows 深色/浅色主题
 - 支持相对路径图片，并把外部链接交给默认浏览器
 - `Ctrl+F`、`Ctrl++`、`Ctrl+-` 使用 WebView2 原生能力
-- 对 Markdown 内嵌 HTML 做转义，避免不受信任文档调用原生 IPC
+- 对 Markdown 内嵌 HTML 进行安全白名单过滤，保留排版标签同时防止脚本调用原生 IPC
 
 ## 构建
 

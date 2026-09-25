@@ -1,8 +1,20 @@
-use pulldown_cmark::{Event, Options, Parser, html};
+use std::sync::LazyLock;
+use ammonia::Builder;
+use pulldown_cmark::{Options, Parser, html};
 
 const STYLE: &str = include_str!("frontend/style.css");
 const SCRIPT: &str = include_str!("frontend/app.js");
 const KATEX_SCRIPT: &str = include_str!("../assets/vendor/katex/katex.min.js");
+
+static SANITIZER: LazyLock<Builder<'static>> = LazyLock::new(|| {
+    let mut builder = Builder::default();
+    builder.add_tags(&["input", "picture", "source", "section"]);
+    builder.add_generic_attributes(&["class", "id", "align", "style"]);
+    builder.add_tag_attributes("input", &["type", "disabled", "checked"]);
+    builder.add_tag_attributes("source", &["srcset", "media", "type"]);
+    builder.add_url_schemes(&["data", "mdviewer"]);
+    builder
+});
 
 fn markdown_options() -> Options {
     Options::ENABLE_TABLES
@@ -14,16 +26,10 @@ fn markdown_options() -> Options {
 }
 
 pub fn markdown_to_html(source: &str) -> String {
-    // Raw HTML is rendered as text. A viewer commonly opens untrusted files, so
-    // arbitrary scripts must never reach WebView2 or its native IPC bridge.
-    let events = Parser::new_ext(source, markdown_options()).map(|event| match event {
-        Event::Html(raw) | Event::InlineHtml(raw) => Event::Text(raw),
-        other => other,
-    });
-
-    let mut output = String::new();
-    html::push_html(&mut output, events);
-    output
+    let events = Parser::new_ext(source, markdown_options());
+    let mut raw_html = String::new();
+    html::push_html(&mut raw_html, events);
+    SANITIZER.clean(&raw_html).to_string()
 }
 
 pub fn document(markdown: &str, title: &str) -> String {
@@ -96,11 +102,24 @@ mod tests {
     }
 
     #[test]
-    fn raw_html_is_inert() {
-        let rendered = markdown_to_html("<script>window.ipc.postMessage('close')</script>");
+    fn unsafe_html_is_sanitized() {
+        let rendered = markdown_to_html(
+            "<script>window.ipc.postMessage('close')</script><img src=\"x\" onerror=\"alert(1)\">",
+        );
 
         assert!(!rendered.contains("<script>"));
-        assert!(rendered.contains("&lt;script&gt;"));
+        assert!(!rendered.contains("window.ipc.postMessage"));
+        assert!(!rendered.contains("onerror"));
+    }
+
+    #[test]
+    fn safe_html_is_preserved() {
+        let source = "<p align=\"center\">\n  <img src=\"assets/mdviewer-icon.png\" width=\"104\" alt=\"icon\" />\n</p>\n\n<h1 align=\"center\">MDViewer</h1>";
+        let rendered = markdown_to_html(source);
+
+        assert!(rendered.contains(r#"<p align="center">"#));
+        assert!(rendered.contains(r#"<img src="assets/mdviewer-icon.png" width="104" alt="icon">"#));
+        assert!(rendered.contains(r#"<h1 align="center">MDViewer</h1>"#));
     }
 
     #[test]
@@ -108,5 +127,17 @@ mod tests {
         let rendered = document("# Hello", "a < b & c");
 
         assert!(rendered.contains("<title>a &lt; b &amp; c</title>"));
+    }
+
+    #[test]
+    fn renders_readme_header() {
+        let readme = include_str!("../README.md");
+        let rendered = markdown_to_html(readme);
+
+        assert!(rendered.contains(r#"<p align="center">"#));
+        assert!(rendered.contains(r#"<img src="assets/mdviewer-icon.png" width="104" alt="MDViewer brand icon">"#));
+        assert!(rendered.contains(r#"<h1 align="center">MDViewer</h1>"#));
+        assert!(rendered.contains(r#"<strong>面向 Windows 的轻量 Markdown 极速阅读器。</strong>"#));
+        assert!(rendered.contains(r#"<img src="screenshots/ss_1.png" width="800" alt="MDViewer 界面截图">"#));
     }
 }

@@ -9,7 +9,7 @@
 - [x] pulldown-cmark 解析 GFM 表格、任务列表、删除线、脚注
 - [x] 内嵌 CSS/JS，无 Node.js 和前端构建链
 - [x] 深浅色排版、自动目录、外链和相对图片
-- [x] 基础安全边界：转义原始 HTML、限制本地资源到文档目录
+- [x] 基础安全边界：安全过滤内嵌 HTML/脚本、限制本地资源到文档目录
 - [x] 在 Windows MSVC 环境完成 `cargo test`、release 编译和 WebView2 启动验证
 
 完成标准：`MDViewer.exe sample.md` 可稳定打开，所有单元测试通过，关闭窗口无残留进程。

@@ -9,6 +9,7 @@ name = "MDViewer"
 path = "src/main.rs"
 
 [dependencies]
+ammonia = "4.2.0"
 anyhow = "1.0"
 http = "1.3"
 mime_guess = "2.0.5"
