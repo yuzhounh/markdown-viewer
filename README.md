@@ -1,6 +1,16 @@
-# MDViewer
+<p align="center">
+  <img src="assets/mdviewer-icon.png" width="104" alt="MDViewer brand icon" />
+</p>
 
-MDViewer 是一个面向 Windows 的轻量 Markdown 阅读器原型：产品交互参考 SumatraPDF，排版交给系统 WebView2，Markdown 在 Rust 侧用 `pulldown-cmark` 解析。
+<h1 align="center">MDViewer</h1>
+
+<p align="center"><strong>面向 Windows 的轻量 Markdown 极速阅读器。</strong></p>
+
+MDViewer 是一个专为 Windows 设计的轻量 Markdown 阅读器：交互参考 SumatraPDF 极简直觉体验，排版交给系统内置的 WebView2，底层通过 Rust `pulldown-cmark` 解析，并原生支持 KaTeX 数学公式与自动生成目录。
+
+<p align="center">
+  <img src="screenshots/ss_1.png" width="800" alt="MDViewer 界面截图" />
+</p>
 
 ## 当前能力
 
