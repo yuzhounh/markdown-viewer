@@ -1,13 +1,20 @@
 <p align="center">
-  <img src="assets/mdviewer-icon.png" width="104" alt="MDViewer brand icon" />
+  <img src="assets/mdviewer-icon.png" width="112" alt="Markdown Viewer logo">
 </p>
 
-<h1 align="center">MDViewer</h1>
+<h1 align="center">Markdown Viewer</h1>
 
-<p align="center"><strong>面向 Windows 的轻量 Markdown 极速阅读器。</strong></p>
+<p align="center"><strong>轻量 Windows Markdown 阅读器，支持离线数学公式与自动目录。</strong></p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b.svg" alt="License: MIT"></a>
+  <a href="https://github.com/yuzhounh/markdown-viewer/releases/latest"><img src="https://img.shields.io/github/v/release/yuzhounh/markdown-viewer?style=flat&amp;color=0969da&amp;label=Release" alt="Latest stable release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-f59e0b?style=flat" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Platform-Windows-0078d4?style=flat" alt="Platform: Windows">
+  <img src="https://img.shields.io/badge/Rust-WebView2-dea584?style=flat&amp;logo=rust&amp;logoColor=white" alt="Rust: WebView2">
+</p>
+
+<p align="center">
+  <a href="https://github.com/yuzhounh/markdown-viewer/releases/latest">下载发布版</a> · <a href="#快速开始">快速开始</a> · <a href="LICENSE">开源协议</a>
 </p>
 
 MDViewer 是一个专为 Windows 设计的轻量 Markdown 阅读器：交互参考 SumatraPDF 极简直觉体验，排版交给系统内置的 WebView2，底层通过 Rust `pulldown-cmark` 解析，并原生支持 KaTeX 数学公式与自动生成目录。
@@ -16,7 +23,7 @@ MDViewer 是一个专为 Windows 设计的轻量 Markdown 阅读器：交互参�
   <img src="screenshots/ss_1.png" width="800" alt="MDViewer 界面截图" />
 </p>
 
-## 亮点特性 (Features)
+## 功能特点
 
 - `MDViewer.exe file.md` 直接打开文件
 - 同一文件只保留一个 Viewer 窗口；再次打开时恢复并聚焦已有窗口
@@ -30,7 +37,7 @@ MDViewer 是一个专为 Windows 设计的轻量 Markdown 阅读器：交互参�
 - `Ctrl+F`、`Ctrl++`、`Ctrl+-` 使用 WebView2 原生能力
 - 对 Markdown 内嵌 HTML 进行安全白名单过滤，保留排版标签同时防止脚本调用原生 IPC
 
-## 快速上手与构建 (Quick Start)
+## 快速开始
 
 需要 Rust MSVC 工具链、Visual Studio C++ Build Tools/Windows SDK，以及 Microsoft Edge WebView2 Runtime。
 
@@ -61,6 +68,6 @@ cargo build --release
 - [SumatraX](https://github.com/yuzhounh/SumatraX)：基于 SumatraPDF 的多格式阅读器；MDViewer 专注于 Markdown 阅读。
 - [light-note](https://github.com/yuzhounh/light-note)：支持编辑、组织和搜索笔记的 Windows 应用。
 
-## 开源协议 (License)
+## 开源协议
 
 本项目采用 [MIT 许可证](LICENSE)。
