@@ -1,4 +1,4 @@
-# MDViewer implementation plan
+# Markdown Viewer implementation plan
 
 目标是做一个“SumatraPDF 的使用方式 + WebView2 的 Markdown 排版质量”的 Windows 阅读器。每一步保持可独立验证，暂不引入编辑功能。
 
@@ -12,7 +12,7 @@
 - [x] 基础安全边界：安全过滤内嵌 HTML/脚本、限制本地资源到文档目录
 - [x] 在 Windows MSVC 环境完成 `cargo test`、release 编译和 WebView2 启动验证
 
-完成标准：`MDViewer.exe sample.md` 可稳定打开，所有单元测试通过，关闭窗口无残留进程。
+完成标准：`MarkdownViewer.exe sample.md` 可稳定打开，所有单元测试通过，关闭窗口无残留进程。
 
 ## P1 — 真正双击即看
 

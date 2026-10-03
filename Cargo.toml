@@ -1,11 +1,11 @@
 [package]
-name = "mdviewer"
+name = "markdown-viewer"
 version = "0.1.2"
 edition = "2024"
 description = "A small, viewer-first Markdown reader for Windows"
 
 [[bin]]
-name = "MDViewer"
+name = "MarkdownViewer"
 path = "src/main.rs"
 
 [dependencies]
