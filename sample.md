@@ -1,4 +1,4 @@
-# MDViewer 阅读样例
+# Markdown Viewer 阅读样例
 
 这是一个以 **Viewer first** 为原则的轻量 Markdown 阅读器。它使用 Rust 读取和解析文件，再交给 Windows WebView2 排版。
 

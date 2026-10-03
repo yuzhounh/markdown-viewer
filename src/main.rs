@@ -153,7 +153,7 @@ fn main() -> Result<()> {
 
     let mut document = load_document(requested)?;
     let watch_source = document.watch_source.take();
-    let window_title = format!("{} — MDViewer", document.title);
+    let window_title = format!("{} — Markdown Viewer", document.title);
     let navigation_root = document.root.clone();
     let document = Arc::new(RwLock::new(document));
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
@@ -168,7 +168,7 @@ fn main() -> Result<()> {
         32,
         32,
     )
-    .context("无法加载 MDViewer 图标")?;
+    .context("无法加载 Markdown Viewer 图标")?;
     let mut window_builder = WindowBuilder::new()
         .with_title(window_title)
         .with_inner_size(Size::Logical(LogicalSize::new(1080.0, 760.0)))
@@ -182,7 +182,7 @@ fn main() -> Result<()> {
     }
     let window = window_builder
         .build(&event_loop)
-        .context("无法创建 MDViewer 窗口")?;
+        .context("无法创建 Markdown Viewer 窗口")?;
 
     let protocol_document = Arc::clone(&document);
     let ipc_proxy = proxy.clone();
@@ -279,17 +279,17 @@ fn main() -> Result<()> {
 
 fn claim_document_instance(path: &Path) -> Result<InstanceClaim> {
     let normalized = normalized_document_path(path);
-    let event_name = HSTRING::from(format!("Local\\MDViewer-{}", instance_key(&normalized)));
+    let event_name = HSTRING::from(format!("Local\\MarkdownViewer-{}", instance_key(&normalized)));
     let (event, already_exists) = unsafe {
         let event = CreateEventW(None, false, false, &event_name)
-            .context("无法创建 MDViewer 窗口激活事件")?;
+            .context("无法创建 Markdown Viewer 窗口激活事件")?;
         (event, GetLastError() == ERROR_ALREADY_EXISTS)
     };
 
     if already_exists {
         let activation = unsafe { SetEvent(event) };
         let _ = unsafe { CloseHandle(event) };
-        activation.context("无法激活已有的 MDViewer 窗口")?;
+        activation.context("无法激活已有的 Markdown Viewer 窗口")?;
         Ok(InstanceClaim::Secondary)
     } else {
         Ok(InstanceClaim::Primary(PrimaryInstance {
@@ -338,7 +338,7 @@ fn spawn_document_watcher(path: PathBuf, initial: String, proxy: EventLoopProxy<
 fn config_dir() -> Option<PathBuf> {
     env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
-        .map(|dir| dir.join("MDViewer"))
+        .map(|dir| dir.join("MarkdownViewer"))
 }
 
 fn window_state_path() -> Option<PathBuf> {
@@ -510,9 +510,9 @@ fn load_document(requested: Option<PathBuf>) -> Result<Document> {
         None => {
             let markdown = include_str!("../sample.md");
             Ok(Document {
-                html: render::document(markdown, "欢迎使用 MDViewer"),
+                html: render::document(markdown, "欢迎使用 Markdown Viewer"),
                 root: env::current_dir().context("无法读取当前目录")?,
-                title: "欢迎使用 MDViewer".to_owned(),
+                title: "欢迎使用 Markdown Viewer".to_owned(),
                 watch_source: None,
             })
         }
