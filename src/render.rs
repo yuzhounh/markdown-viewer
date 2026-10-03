@@ -135,9 +135,9 @@ mod tests {
         let rendered = markdown_to_html(readme);
 
         assert!(rendered.contains(r#"<p align="center">"#));
-        assert!(rendered.contains(r#"<img src="assets/mdviewer-icon.png" width="104" alt="Markdown Viewer brand icon">"#));
+        assert!(rendered.contains(r#"<img src="assets/mdviewer-icon.png" width="112" alt="Markdown Viewer logo">"#));
         assert!(rendered.contains(r#"<h1 align="center">Markdown Viewer</h1>"#));
-        assert!(rendered.contains(r#"<strong>面向 Windows 的轻量 Markdown 极速阅读器。</strong>"#));
+        assert!(rendered.contains(r#"<strong>轻量 Windows Markdown 阅读器，支持离线数学公式与自动目录。</strong>"#));
         assert!(rendered.contains(r#"<img src="screenshots/ss_1.png" width="800" alt="Markdown Viewer 界面截图">"#));
     }
 }
