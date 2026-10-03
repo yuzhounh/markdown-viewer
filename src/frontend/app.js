@@ -57,6 +57,55 @@
     }
   });
 
+  const COPY_ICON = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 3.5v-.4A1.6 1.6 0 0 0 8.9 1.5H3.1a1.6 1.6 0 0 0-1.6 1.6v5.8a1.6 1.6 0 0 0 1.6 1.6h.4"/></svg>';
+  const CHECK_ICON = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8"/></svg>';
+
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise((resolve, reject) => {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand('copy');
+      area.remove();
+      ok ? resolve() : reject(new Error('copy failed'));
+    });
+  }
+
+  content.querySelectorAll('pre').forEach((pre) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'code-block';
+    pre.replaceWith(wrapper);
+    wrapper.appendChild(pre);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'copy-button';
+    button.title = '复制';
+    button.setAttribute('aria-label', '复制');
+    button.innerHTML = COPY_ICON;
+    let timer = 0;
+    button.addEventListener('click', () => {
+      const code = pre.querySelector('code') || pre;
+      const text = code.textContent.replace(/\n$/, '');
+      copyText(text).then(() => true, () => false).then((ok) => {
+        button.innerHTML = ok ? CHECK_ICON : COPY_ICON;
+        button.classList.toggle('done', ok);
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          button.innerHTML = COPY_ICON;
+          button.classList.remove('done');
+        }, 1500);
+      });
+    });
+    wrapper.appendChild(button);
+  });
+
   function openToc() {
     panel.classList.add('open');
     panel.setAttribute('aria-hidden', 'false');

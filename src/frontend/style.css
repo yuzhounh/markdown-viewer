@@ -94,6 +94,8 @@ pre {
   border-radius: 9px;
   background: var(--soft);
   tab-size: 4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 pre code { padding: 0; border-radius: 0; background: transparent; }
@@ -247,3 +249,27 @@ input[type="checkbox"] { margin: 0 0.48em 0.15em; accent-color: var(--accent); }
 }
 ::-webkit-scrollbar-thumb:hover { background: rgba(140, 149, 159, 0.55); background-clip: content-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+/* 代码块复制按钮 */
+.code-block { position: relative; margin: 0 0 1.15em; }
+.code-block > pre { margin: 0; }
+.copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.code-block:hover .copy-button, .copy-button:focus-visible, .copy-button.done { opacity: 1; }
+.copy-button:hover { color: var(--text); }
+.copy-button.done { color: var(--accent); }
