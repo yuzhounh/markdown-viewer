@@ -17,15 +17,15 @@
   <a href="https://github.com/yuzhounh/markdown-viewer/releases/latest">下载发布版</a> · <a href="#快速开始">快速开始</a> · <a href="LICENSE">开源协议</a>
 </p>
 
-MDViewer 是一个专为 Windows 设计的轻量 Markdown 阅读器：交互参考 SumatraPDF 极简直觉体验，排版交给系统内置的 WebView2，底层通过 Rust `pulldown-cmark` 解析，并原生支持 KaTeX 数学公式与自动生成目录。
+Markdown Viewer 是一个专为 Windows 设计的轻量 Markdown 阅读器：交互参考 SumatraPDF 极简直觉体验，排版交给系统内置的 WebView2，底层通过 Rust `pulldown-cmark` 解析，并原生支持 KaTeX 数学公式与自动生成目录。
 
 <p align="center">
-  <img src="screenshots/ss_1.png" width="800" alt="MDViewer 界面截图" />
+  <img src="screenshots/ss_1.png" width="800" alt="Markdown Viewer 界面截图" />
 </p>
 
 ## 功能特点
 
-- `MDViewer.exe file.md` 直接打开文件
+- `MarkdownViewer.exe file.md` 直接打开文件
 - 同一文件只保留一个 Viewer 窗口；再次打开时恢复并聚焦已有窗口
 - 外部软件保存当前文件后自动重新读取并刷新渲染
 - GFM 表格、任务列表、删除线和脚注
@@ -49,10 +49,10 @@ cargo test
 cargo build --release
 ```
 
-生成的程序在 `target\release\MDViewer.exe`：
+生成的程序在 `target\release\MarkdownViewer.exe`：
 
 ```powershell
-.\target\release\MDViewer.exe .\sample.md
+.\target\release\MarkdownViewer.exe .\sample.md
 ```
 
 无参数启动时会显示内置的 `sample.md`，便于快速检查排版。
@@ -65,7 +65,7 @@ cargo build --release
 
 ## 相关项目
 
-- [SumatraX](https://github.com/yuzhounh/SumatraX)：基于 SumatraPDF 的多格式阅读器；MDViewer 专注于 Markdown 阅读。
+- [SumatraX](https://github.com/yuzhounh/SumatraX)：基于 SumatraPDF 的多格式阅读器；Markdown Viewer 专注于 Markdown 阅读。
 - [light-note](https://github.com/yuzhounh/light-note)：支持编辑、组织和搜索笔记的 Windows 应用。
 
 ## 开源协议

@@ -114,12 +114,12 @@ mod tests {
 
     #[test]
     fn safe_html_is_preserved() {
-        let source = "<p align=\"center\">\n  <img src=\"assets/mdviewer-icon.png\" width=\"104\" alt=\"icon\" />\n</p>\n\n<h1 align=\"center\">MDViewer</h1>";
+        let source = "<p align=\"center\">\n  <img src=\"assets/mdviewer-icon.png\" width=\"104\" alt=\"icon\" />\n</p>\n\n<h1 align=\"center\">Markdown Viewer</h1>";
         let rendered = markdown_to_html(source);
 
         assert!(rendered.contains(r#"<p align="center">"#));
         assert!(rendered.contains(r#"<img src="assets/mdviewer-icon.png" width="104" alt="icon">"#));
-        assert!(rendered.contains(r#"<h1 align="center">MDViewer</h1>"#));
+        assert!(rendered.contains(r#"<h1 align="center">Markdown Viewer</h1>"#));
     }
 
     #[test]
@@ -135,9 +135,9 @@ mod tests {
         let rendered = markdown_to_html(readme);
 
         assert!(rendered.contains(r#"<p align="center">"#));
-        assert!(rendered.contains(r#"<img src="assets/mdviewer-icon.png" width="104" alt="MDViewer brand icon">"#));
-        assert!(rendered.contains(r#"<h1 align="center">MDViewer</h1>"#));
+        assert!(rendered.contains(r#"<img src="assets/mdviewer-icon.png" width="104" alt="Markdown Viewer brand icon">"#));
+        assert!(rendered.contains(r#"<h1 align="center">Markdown Viewer</h1>"#));
         assert!(rendered.contains(r#"<strong>面向 Windows 的轻量 Markdown 极速阅读器。</strong>"#));
-        assert!(rendered.contains(r#"<img src="screenshots/ss_1.png" width="800" alt="MDViewer 界面截图">"#));
+        assert!(rendered.contains(r#"<img src="screenshots/ss_1.png" width="800" alt="Markdown Viewer 界面截图">"#));
     }
 }

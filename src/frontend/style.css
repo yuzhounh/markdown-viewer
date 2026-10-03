@@ -235,3 +235,15 @@ input[type="checkbox"] { margin: 0 0.48em 0.15em; accent-color: var(--accent); }
   .markdown-body { width: 100%; max-width: none; }
   a { color: inherit; }
 }
+
+/* 浅色滚动条 */
+::-webkit-scrollbar { width: 14px; height: 14px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 149, 159, 0.32);
+  border: 3px solid transparent;
+  border-radius: 8px;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(140, 149, 159, 0.55); background-clip: content-box; }
+::-webkit-scrollbar-corner { background: transparent; }
