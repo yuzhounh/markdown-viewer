@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod render;
+mod watcher;
 
 use std::{
     borrow::Cow,
@@ -10,7 +11,6 @@ use std::{
     path::{Component, Path, PathBuf},
     sync::{Arc, RwLock},
     thread,
-    time::Duration,
 };
 
 use anyhow::{Context, Result};
@@ -216,9 +216,15 @@ fn main() -> Result<()> {
     let mut zoom_factor = load_zoom_factor();
     let _ = webview.zoom(zoom_factor);
 
-    if let Some((path, initial)) = watch_source {
-        spawn_document_watcher(path, initial, proxy.clone());
-    }
+    let _document_watcher = watch_source
+        .map(|(path, initial)| {
+            let proxy = proxy.clone();
+            watcher::start(&path, initial, move |markdown| {
+                proxy.send_event(UserEvent::Reload(markdown)).is_ok()
+            })
+        })
+        .transpose()
+        .context("无法监听 Markdown 文件变化")?;
     if let Some(instance) = primary_instance.as_mut() {
         instance.start_listener(proxy.clone());
     }
@@ -279,7 +285,10 @@ fn main() -> Result<()> {
 
 fn claim_document_instance(path: &Path) -> Result<InstanceClaim> {
     let normalized = normalized_document_path(path);
-    let event_name = HSTRING::from(format!("Local\\MarkdownViewer-{}", instance_key(&normalized)));
+    let event_name = HSTRING::from(format!(
+        "Local\\MarkdownViewer-{}",
+        instance_key(&normalized)
+    ));
     let (event, already_exists) = unsafe {
         let event = CreateEventW(None, false, false, &event_name)
             .context("无法创建 Markdown Viewer 窗口激活事件")?;
@@ -314,25 +323,6 @@ fn stable_hash(bytes: &[u8], seed: u64) -> u64 {
     bytes.iter().fold(seed, |hash, byte| {
         (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
     })
-}
-
-fn spawn_document_watcher(path: PathBuf, initial: String, proxy: EventLoopProxy<UserEvent>) {
-    thread::spawn(move || {
-        let mut changes = ChangeDebouncer::new(initial);
-        loop {
-            thread::sleep(Duration::from_millis(200));
-            let Ok(markdown) = fs::read_to_string(&path) else {
-                // Editors may briefly remove, replace, or lock a file while saving.
-                continue;
-            };
-            let Some(markdown) = changes.observe(markdown) else {
-                continue;
-            };
-            if proxy.send_event(UserEvent::Reload(markdown)).is_err() {
-                break;
-            }
-        }
-    });
 }
 
 fn config_dir() -> Option<PathBuf> {
