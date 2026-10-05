@@ -20,7 +20,7 @@
 Markdown Viewer 是一个专为 Windows 设计的轻量 Markdown 阅读器：交互参考 SumatraPDF 极简直觉体验，排版交给系统内置的 WebView2，底层通过 Rust `pulldown-cmark` 解析，并原生支持 KaTeX 数学公式与自动生成目录。
 
 <p align="center">
-  <img src="screenshots/ss_1.png" width="800" alt="Markdown Viewer 界面截图" />
+  <img src="assets/screenshot.png" width="800" alt="Markdown Viewer 界面截图" />
 </p>
 
 ## 功能特点
