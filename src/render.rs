@@ -5,6 +5,7 @@ use pulldown_cmark::{Options, Parser, html};
 const STYLE: &str = include_str!("frontend/style.css");
 const SCRIPT: &str = include_str!("frontend/app.js");
 const KATEX_SCRIPT: &str = include_str!("../assets/vendor/katex/katex.min.js");
+const KATEX_STYLE: &str = include_str!(concat!(env!("OUT_DIR"), "/katex.min.css"));
 
 static SANITIZER: LazyLock<Builder<'static>> = LazyLock::new(|| {
     let mut builder = Builder::default();
@@ -44,6 +45,7 @@ pub fn document(markdown: &str, title: &str) -> String {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data: https: http:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src 'self' data:">
   <title>{safe_title}</title>
+  <style>{KATEX_STYLE}</style>
   <style>{STYLE}</style>
 </head>
 <body>
@@ -138,6 +140,6 @@ mod tests {
         assert!(rendered.contains(r#"<img src="assets/mdviewer-icon.png" width="112" alt="Markdown Viewer logo">"#));
         assert!(rendered.contains(r#"<h1 align="center">Markdown Viewer</h1>"#));
         assert!(rendered.contains(r#"<strong>轻量 Windows Markdown 阅读器，支持离线数学公式与自动目录。</strong>"#));
-        assert!(rendered.contains(r#"<img src="screenshots/ss_1.png" width="800" alt="Markdown Viewer 界面截图">"#));
+        assert!(rendered.contains(r#"<img src="assets/screenshot.png" width="800" alt="Markdown Viewer 界面截图">"#));
     }
 }
