@@ -59,7 +59,7 @@ cargo build --release
 
 ## 设计边界
 
-第一阶段只做 Viewer，不加入编辑器、多标签、Node.js、前端构建链或远程资源依赖。CSS、JavaScript 和 KaTeX 通过 `include_str!` 编译进单个 exe。WebView2 Runtime 由 Windows 提供，不随程序打包。
+第一阶段只做 Viewer，不加入编辑器、多标签、Node.js、前端构建链或远程资源依赖。公式使用 KaTeX HTML 排版，并保留 MathML 供无障碍读取；配套 CSS、WOFF2 字体与 JavaScript 均编译进单个 exe，运行时无需联网。WebView2 Runtime 由 Windows 提供，不随程序打包。
 
 详细路线见 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)。
 
