@@ -46,7 +46,7 @@
     try {
       katex.render(source, element, {
         displayMode: element.classList.contains('math-display'),
-        output: 'mathml',
+        output: 'htmlAndMathml',
         throwOnError: true,
         strict: 'ignore',
         trust: false,
