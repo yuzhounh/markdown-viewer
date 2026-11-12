@@ -7,6 +7,73 @@
   const toc = document.getElementById('toc');
   const usedIds = new Map();
   let wheelDelta = 0;
+  const stateElement = document.getElementById('browser-state');
+  let browser = stateElement ? JSON.parse(stateElement.textContent) : null;
+  let restoring = true;
+
+  function saveReaderState() {
+    if (!browser || restoring || !window.ipc) return;
+    window.ipc.postMessage('state:' + JSON.stringify({
+      id: browser.id, x: window.scrollX, y: window.scrollY,
+      tocOpen: panel.classList.contains('open'),
+    }));
+  }
+
+  function sendCommand(command) {
+    saveReaderState();
+    if (window.ipc) window.ipc.postMessage(command);
+  }
+
+  window.setBrowserState = (state) => {
+    browser = state;
+    document.body.classList.toggle('native-caption', !!state.nativeCaption);
+    const list = document.getElementById('tab-list');
+    list.replaceChildren();
+    state.tabs.forEach((tab) => {
+      const item = document.createElement('div');
+      item.className = 'document-tab';
+      const select = document.createElement('button');
+      select.type = 'button';
+      select.className = 'tab-select';
+      select.textContent = tab.title;
+      select.title = tab.path || tab.title;
+      select.setAttribute('role', 'tab');
+      select.setAttribute('aria-selected', String(tab.id === state.id));
+      select.tabIndex = tab.id === state.id ? 0 : -1;
+      select.addEventListener('click', () => sendCommand(`select:${tab.id}`));
+      select.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          event.preventDefault();
+          sendCommand(event.key === 'ArrowLeft' ? 'previous-tab' : 'next-tab');
+        }
+      });
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'tab-close';
+      close.textContent = '×';
+      close.title = `关闭 ${tab.title}`;
+      close.setAttribute('aria-label', close.title);
+      close.addEventListener('click', () => sendCommand(`close-tab:${tab.id}`));
+      item.addEventListener('auxclick', (event) => {
+        if (event.button === 1) { event.preventDefault(); sendCommand(`close-tab:${tab.id}`); }
+      });
+      item.classList.toggle('selected', tab.id === state.id);
+      item.append(select, close);
+      list.appendChild(item);
+    });
+    list.querySelector('.selected')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
+
+  window.showReaderError = (message) => {
+    const error = document.getElementById('reader-error');
+    error.textContent = message;
+    error.hidden = false;
+  };
+
+  if (browser) window.setBrowserState(browser);
+  document.getElementById('open-button').addEventListener('click', () => sendCommand('open-dialog'));
+  window.addEventListener('scroll', saveReaderState, { passive: true });
+  window.addEventListener('pagehide', saveReaderState);
 
   function requestZoom(command) {
     if (window.ipc) {
@@ -110,15 +177,25 @@
     panel.classList.add('open');
     panel.setAttribute('aria-hidden', 'false');
     backdrop.hidden = false;
+    saveReaderState();
   }
 
   function closeToc() {
     panel.classList.remove('open');
     panel.setAttribute('aria-hidden', 'true');
     backdrop.hidden = true;
+    saveReaderState();
   }
 
-  document.getElementById('toc-button').addEventListener('click', openToc);
+  window.toggleToc = () => panel.classList.contains('open') ? closeToc() : openToc();
+  window.addEventListener('keydown', (event) => {
+    if (event.ctrlKey && !event.shiftKey && !event.altKey
+      && (event.code === 'KeyB' || event.key.toLowerCase() === 'b')) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) window.toggleToc();
+    }
+  }, true);
   document.getElementById('toc-close').addEventListener('click', closeToc);
   backdrop.addEventListener('click', closeToc);
 
@@ -140,12 +217,25 @@
   }, { passive: false });
 
   document.addEventListener('keydown', (event) => {
-    if (event.ctrlKey && event.shiftKey && event.code === 'KeyO') {
+    if (event.ctrlKey && event.shiftKey && !event.altKey && event.code === 'KeyA' && !event.isComposing && browser) {
       event.preventDefault();
-      panel.classList.contains('open') ? closeToc() : openToc();
+      if (!event.repeat) sendCommand('search-tabs');
       return;
     }
-
+    if (event.ctrlKey && !event.altKey && browser) {
+      let command;
+      if (!event.shiftKey && event.code === 'KeyO') command = 'open-dialog';
+      else if (!event.shiftKey && event.code === 'KeyW') command = 'close';
+      else if (event.key === 'Tab') command = event.shiftKey ? 'previous-tab' : 'next-tab';
+      else if (!event.shiftKey && event.code === 'PageDown') command = 'next-tab';
+      else if (!event.shiftKey && event.code === 'PageUp') command = 'previous-tab';
+      else if (!event.shiftKey && /^Digit[1-9]$/.test(event.code)) {
+        const number = Number(event.code.slice(-1));
+        const tab = browser.tabs[number === 9 ? browser.tabs.length - 1 : number - 1];
+        if (tab) command = `select:${tab.id}`;
+      }
+      if (command) { event.preventDefault(); sendCommand(command); return; }
+    }
     if (event.ctrlKey && !event.altKey) {
       if (event.key === '+' || event.key === '=' || event.code === 'NumpadAdd') {
         event.preventDefault();
@@ -168,7 +258,7 @@
       if (panel.classList.contains('open')) {
         closeToc();
       } else if (window.ipc) {
-        window.ipc.postMessage('close');
+        sendCommand('close');
       }
     }
   });
@@ -184,5 +274,17 @@
     // Rust validates navigation and hands safe links to the default Windows app.
     event.preventDefault();
     location.href = link.href;
+  });
+
+  // Restore after fonts, formulas and local images have established the page height.
+  window.addEventListener('load', () => {
+    if (browser) {
+      if (browser.tocOpen) openToc();
+      const behavior = document.documentElement.style.scrollBehavior;
+      document.documentElement.style.scrollBehavior = 'auto';
+      window.scrollTo(browser.x, browser.y);
+      document.documentElement.style.scrollBehavior = behavior;
+    }
+    restoring = false;
   });
 })();

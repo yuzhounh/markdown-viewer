@@ -49,7 +49,12 @@ pub fn document(markdown: &str, title: &str) -> String {
   <style>{STYLE}</style>
 </head>
 <body>
-  <button id="toc-button" type="button" aria-label="打开目录" title="目录 (Ctrl+Shift+O)">☰</button>
+  <!--browser-state-->
+  <header id="browser-bar">
+    <nav id="tab-list" role="tablist" aria-label="已打开的文档"></nav>
+    <button id="open-button" type="button" title="打开 Markdown 文件 (Ctrl+O)" aria-label="打开文件">＋</button>
+  </header>
+  <div id="reader-error" role="alert" hidden></div>
   <div id="toc-backdrop" hidden></div>
   <aside id="toc-panel" aria-label="文档目录" aria-hidden="true">
     <header><strong>目录</strong><button id="toc-close" type="button" aria-label="关闭目录">×</button></header>

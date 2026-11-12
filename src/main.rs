@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app;
+mod caption;
 mod render;
 mod watcher;
 
@@ -34,12 +36,10 @@ use wry::{WebView, WebViewBuilder};
 
 #[derive(Debug)]
 enum UserEvent {
-    Activate,
-    Close,
-    Reload(String),
-    ZoomIn,
-    ZoomOut,
-    ZoomReset,
+    Incoming,
+    Command(tao::window::WindowId, String),
+    TabDrop { source: tao::window::WindowId, drop: caption::TabDrop },
+    Reload(u64, String),
 }
 
 struct Document {
@@ -73,7 +73,7 @@ impl PrimaryInstance {
             let event = HANDLE(raw_event as *mut c_void);
             loop {
                 if unsafe { WaitForSingleObject(event, INFINITE) } != WAIT_OBJECT_0
-                    || proxy.send_event(UserEvent::Activate).is_err()
+                    || proxy.send_event(UserEvent::Incoming).is_err()
                 {
                     break;
                 }
@@ -134,177 +134,7 @@ const ZOOM_FACTORS: &[f64] = &[
 ];
 
 fn main() -> Result<()> {
-    let requested = env::args_os()
-        .nth(1)
-        .map(PathBuf::from)
-        .map(|path| {
-            path.canonicalize()
-                .with_context(|| format!("找不到文件：{}", path.display()))
-        })
-        .transpose()?;
-    let mut primary_instance = if let Some(path) = requested.as_deref() {
-        match claim_document_instance(path)? {
-            InstanceClaim::Primary(instance) => Some(instance),
-            InstanceClaim::Secondary => return Ok(()),
-        }
-    } else {
-        None
-    };
-
-    let mut document = load_document(requested)?;
-    let watch_source = document.watch_source.take();
-    let window_title = format!("{} — Markdown Viewer", document.title);
-    let navigation_root = document.root.clone();
-    let document = Arc::new(RwLock::new(document));
-    let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
-    let proxy = event_loop.create_proxy();
-    let saved_window_state = load_window_state().filter(|state| {
-        event_loop
-            .available_monitors()
-            .any(|monitor| state_intersects_monitor(*state, monitor.position(), monitor.size()))
-    });
-    let app_icon = Icon::from_rgba(
-        include_bytes!("../assets/mdviewer-icon-32.rgba").to_vec(),
-        32,
-        32,
-    )
-    .context("无法加载 Markdown Viewer 图标")?;
-    let mut window_builder = WindowBuilder::new()
-        .with_title(window_title)
-        .with_inner_size(Size::Logical(LogicalSize::new(1080.0, 760.0)))
-        .with_min_inner_size(Size::Logical(LogicalSize::new(520.0, 400.0)))
-        .with_window_icon(Some(app_icon));
-    if let Some(state) = saved_window_state {
-        window_builder = window_builder
-            .with_position(PhysicalPosition::new(state.x, state.y))
-            .with_inner_size(PhysicalSize::new(state.width, state.height))
-            .with_maximized(state.maximized);
-    }
-    let window = window_builder
-        .build(&event_loop)
-        .context("无法创建 Markdown Viewer 窗口")?;
-
-    let protocol_document = Arc::clone(&document);
-    let ipc_proxy = proxy.clone();
-
-    let webview = WebViewBuilder::new()
-        .with_custom_protocol("mdviewer".into(), move |_webview_id, request| {
-            let document = protocol_document
-                .read()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            serve_request(request.uri().to_string(), &document)
-        })
-        .with_url("mdviewer://localhost/index.html")
-        .with_navigation_handler(move |url| handle_navigation(&url, &navigation_root))
-        .with_ipc_handler(move |request| {
-            let event = match request.body().as_str() {
-                "close" => Some(UserEvent::Close),
-                "zoom-in" => Some(UserEvent::ZoomIn),
-                "zoom-out" => Some(UserEvent::ZoomOut),
-                "zoom-reset" => Some(UserEvent::ZoomReset),
-                _ => None,
-            };
-            if let Some(event) = event {
-                let _ = ipc_proxy.send_event(event);
-            }
-        })
-        .with_hotkeys_zoom(false)
-        .with_devtools(cfg!(debug_assertions))
-        .build(&window)
-        .context("无法启动 WebView2；请确认 Microsoft Edge WebView2 Runtime 已安装")?;
-
-    let mut zoom_factor = load_zoom_factor();
-    let _ = webview.zoom(zoom_factor);
-
-    let _document_watcher = watch_source
-        .map(|(path, initial)| {
-            let proxy = proxy.clone();
-            watcher::start(&path, initial, move |markdown| {
-                proxy.send_event(UserEvent::Reload(markdown)).is_ok()
-            })
-        })
-        .transpose()
-        .context("无法监听 Markdown 文件变化")?;
-    if let Some(instance) = primary_instance.as_mut() {
-        instance.start_listener(proxy.clone());
-    }
-
-    let mut normal_window_state = saved_window_state
-        .map(|state| WindowState {
-            maximized: false,
-            ..state
-        })
-        .or_else(|| capture_window_state(&window));
-
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
-        match event {
-            Event::UserEvent(UserEvent::Activate) => {
-                window.set_minimized(false);
-                window.set_visible(true);
-                window.set_focus();
-            }
-            Event::UserEvent(UserEvent::Close)
-            | Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => {
-                save_window_state(&window, normal_window_state);
-                *control_flow = ControlFlow::Exit;
-            }
-            Event::UserEvent(UserEvent::ZoomIn) => {
-                change_zoom(&webview, &mut zoom_factor, 1);
-            }
-            Event::UserEvent(UserEvent::ZoomOut) => {
-                change_zoom(&webview, &mut zoom_factor, -1);
-            }
-            Event::UserEvent(UserEvent::ZoomReset) => {
-                set_zoom(&webview, &mut zoom_factor, DEFAULT_ZOOM_FACTOR);
-            }
-            Event::UserEvent(UserEvent::Reload(markdown)) => {
-                let mut document = document
-                    .write()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                let title = document.title.clone();
-                document.html = render::document(&markdown, &title);
-                drop(document);
-                let _ = webview.evaluate_script("window.location.reload()");
-            }
-            Event::WindowEvent {
-                event: WindowEvent::Moved(_) | WindowEvent::Resized(_),
-                ..
-            } if !window.is_maximized() && !window.is_minimized() => {
-                if let Some(state) = capture_window_state(&window) {
-                    normal_window_state = Some(state);
-                }
-            }
-            _ => {}
-        }
-    });
-}
-
-fn claim_document_instance(path: &Path) -> Result<InstanceClaim> {
-    let normalized = normalized_document_path(path);
-    let event_name = HSTRING::from(format!(
-        "Local\\MarkdownViewer-{}",
-        instance_key(&normalized)
-    ));
-    let (event, already_exists) = unsafe {
-        let event = CreateEventW(None, false, false, &event_name)
-            .context("无法创建 Markdown Viewer 窗口激活事件")?;
-        (event, GetLastError() == ERROR_ALREADY_EXISTS)
-    };
-
-    if already_exists {
-        let activation = unsafe { SetEvent(event) };
-        let _ = unsafe { CloseHandle(event) };
-        activation.context("无法激活已有的 Markdown Viewer 窗口")?;
-        Ok(InstanceClaim::Secondary)
-    } else {
-        Ok(InstanceClaim::Primary(PrimaryInstance {
-            event: Some(event),
-        }))
-    }
+    app::run()
 }
 
 fn normalized_document_path(path: &Path) -> String {
@@ -463,21 +293,6 @@ fn stepped_zoom_factor(current: f64, step: isize) -> f64 {
     ZOOM_FACTORS[next_index as usize]
 }
 
-fn change_zoom(webview: &WebView, current: &mut f64, step: isize) {
-    let next = stepped_zoom_factor(*current, step);
-    set_zoom(webview, current, next);
-}
-
-fn set_zoom(webview: &WebView, current: &mut f64, next: f64) {
-    if (*current - next).abs() < f64::EPSILON {
-        return;
-    }
-    if webview.zoom(next).is_ok() {
-        *current = next;
-        save_zoom_factor(next);
-    }
-}
-
 fn load_document(requested: Option<PathBuf>) -> Result<Document> {
     match requested {
         Some(absolute) => {
@@ -578,31 +393,6 @@ fn response(status: StatusCode, content_type: &str, body: Vec<u8>) -> Response<C
         .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
         .body(Cow::Owned(body))
         .expect("static response headers are valid")
-}
-
-fn handle_navigation(raw_url: &str, root: &Path) -> bool {
-    let Ok(url) = Url::parse(raw_url) else {
-        return false;
-    };
-
-    // Wry rewrites custom protocols to http://<scheme>.localhost on Windows.
-    if url.scheme() == "mdviewer" || url.host_str() == Some("mdviewer.localhost") {
-        if matches!(url.path(), "" | "/" | "/index.html") {
-            return true;
-        }
-
-        let decoded = percent_decode_str(url.path()).decode_utf8_lossy();
-        let relative = Path::new(decoded.trim_start_matches('/'));
-        if let Some(path) = canonical_child(root, &root.join(relative)) {
-            let _ = open::that_detached(path);
-        }
-        return false;
-    }
-
-    if matches!(url.scheme(), "http" | "https" | "mailto") {
-        let _ = open::that_detached(raw_url);
-    }
-    false
 }
 
 #[cfg(test)]
