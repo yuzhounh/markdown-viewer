@@ -86,7 +86,11 @@ pub fn run() -> Result<()> {
                 browser.command(window, &command, target)
             }
             Event::UserEvent(UserEvent::TabDrop { source, drop }) => {
-                browser.drop_tab(source, drop, target)
+                let result = browser.drop_tab(source, drop, target);
+                for reader in &browser.windows {
+                    reader.caption.finish_drop(drop.document);
+                }
+                result
             }
             Event::UserEvent(UserEvent::Reload(id, markdown)) => {
                 let mut pages = browser.pages.write().unwrap();

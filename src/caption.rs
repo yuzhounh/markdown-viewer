@@ -42,6 +42,7 @@ unsafe extern "C" {
         path: *const u16,
     );
     fn md_caption_commit(caption: *mut c_void);
+    fn md_caption_finish_drop(caption: *mut c_void, document: u64);
     fn md_caption_take_drop(token: u64, drop: *mut TabDrop) -> bool;
 }
 
@@ -77,6 +78,10 @@ extern "C" fn on_command(context: *mut c_void, command: u32, id: u64) {
 }
 
 impl NativeCaption {
+    pub fn finish_drop(&self, document: u64) {
+        unsafe { md_caption_finish_drop(self.native.as_ptr(), document) };
+    }
+
     pub fn new(window: &Window, proxy: EventLoopProxy<UserEvent>) -> Result<Self> {
         let mut callback = Box::new(CallbackState {
             window: window.id(),

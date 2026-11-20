@@ -72,12 +72,17 @@ struct Caption {
     int pressed_action{-1}, drop_slot{-1};
     bool dragging{};
     bool attached_drag{};
+    bool frame_collapsed{};
+    HRGN original_region{};
+    unsigned long long pending_drop{};
+    float incoming_x{};
     int drag_slot{-1};
     float drag_x{};
     struct TabMotion { float from{}, target{}; ULONGLONG start{}; };
     std::unordered_map<unsigned long long,TabMotion> tab_motion;
     POINT down_screen{};
     int anchor_x{}, anchor_y{};
+    int ghost_width{}, ghost_height{}, source_tab_width{};
     HWND ghost{};
     std::wstring drag_title;
     struct SearchRow { std::wstring title, detail; unsigned command{}; unsigned long long id{}; };
@@ -198,7 +203,6 @@ struct Caption {
         RECT client{};
         GetClientRect(parent, &client);
         scale = GetDpiForWindow(parent) / 96.0f;
-        auto bar = app.TitleBar();
         height = int(std::lround(Metrics::band * scale));
         // 46-DIP cells fill the whole 40-DIP band, like SumatraX's own caption
         // buttons; Windows' caption buttons are collapsed, so nothing is drawn
@@ -213,14 +217,20 @@ struct Caption {
         float buttons = right / scale;
         // Share the available strip across all tabs; the dropdown keeps narrow tabs identifiable.
         viewport = std::max(0.0f, logical - tab_left - 40 - Metrics::drag_gap - buttons);
-        tab_width = tabs.empty() ? 240 : std::clamp(viewport / tabs.size(), 0.01f, 280.0f);
+        layout_tab_slots();
+    }
+
+    void layout_tab_slots() {
+        int count = int(tabs.size()) + (drop_slot >= 0 ? 1 : 0);
+        if (dragging && !attached_drag && pressed_index() >= 0) --count;
+        tab_width = count > 0 ? std::clamp(viewport / count, 0.01f, 280.0f) : 240.0f;
         scroll = 0;
-        plus_x = tab_left + std::min(viewport, tab_width * tabs.size());
+        plus_x = tab_left + std::min(viewport, tab_width * count);
         float drag_left = plus_x + 40;
         winrt::Windows::Graphics::RectInt32 drag{
             int(std::ceil(drag_left * scale)), 0,
             std::max(0, btn_left - int(std::ceil(drag_left * scale))), height};
-        bar.SetDragRectangles({drag});
+        app.TitleBar().SetDragRectangles({drag});
         arrange_tabs();
         InvalidateRect(child, nullptr, FALSE);
     }
@@ -275,6 +285,8 @@ struct Caption {
         bool pending=false;
         for(size_t i=0;i<tabs.size();++i) {
             int slot=int(i);
+            if(dragging && !attached_drag && from>=0 && slot>from) --slot;
+            if(drop_slot>=0 && slot>=drop_slot) ++slot;
             if(dragging && attached_drag && from>=0) {
                 if(from<drag_slot && int(i)>from && int(i)<=drag_slot) --slot;
                 if(from>drag_slot && int(i)>=drag_slot && int(i)<from) ++slot;
@@ -372,11 +384,6 @@ struct Caption {
             if (hovered==-3) { SolidBrush brush(hover()); g.FillEllipse(&brush,cx-Metrics::control/2,cy-Metrics::control/2,Metrics::control,Metrics::control); }
             Pen pen(highlighted_foreground(hovered==-3),1.5f);
             g.DrawLine(&pen,cx-5,cy,cx+5,cy); g.DrawLine(&pen,cx,cy-5,cx,cy+5);
-            if(drop_slot>=0) {
-                float x=std::clamp(tab_left+drop_slot*tab_width-scroll,tab_left,tab_left+viewport);
-                Pen marker(dark?Color(255,88,166,255):Color(255,9,105,218),3);
-                g.DrawLine(&marker,x,7.0f,x,height/scale-5);
-            }
         }
         {
             Graphics g(dc); g.ScaleTransform(scale,scale); g.SetSmoothingMode(SmoothingModeAntiAlias);
@@ -433,38 +440,54 @@ struct Caption {
         return L"Markdown Viewer";
     }
 
-    int insertion_slot(POINT screen) const {
-        ScreenToClient(child,&screen);
-        float x=screen.x/scale-tab_left+scroll;
-        return std::clamp(int(std::floor(x/tab_width+0.5f)),0,int(tabs.size()));
-    }
-
-    static Caption* drop_target(POINT screen,HWND) {
-        struct Search {POINT point;Caption* target{};} search{screen};
-        EnumWindows([](HWND window,LPARAM data)->BOOL {
-            auto& search=*reinterpret_cast<Search*>(data);
-            if(!IsWindowVisible(window) || IsIconic(window)) return TRUE;
-            // As in Dragablz, order live tab hosts by Z-order. Overlay/input-sink
-            // windows are not tab hosts and must not turn an in-strip drop into a detach.
-            for(auto caption:captions) {
-                if(caption->parent!=window) continue;
-                RECT bounds{};GetWindowRect(window,&bounds);
-                if(!PtInRect(&bounds,search.point)) continue;
-                RECT strip{};GetWindowRect(caption->child,&strip);
-                if(PtInRect(&strip,search.point)) search.target=caption;
-                // A foreground document body blocks a rear tab strip. Dropping here
-                // detaches instead of merging into a header the user cannot see.
-                return FALSE;
-            }
-            return TRUE;
-        },reinterpret_cast<LPARAM>(&search));
-        return search.target;
-    }
-
-    static void clear_drop_markers() {
-        for(auto caption:captions) if(caption->drop_slot!=-1) {
-            caption->drop_slot=-1;InvalidateRect(caption->child,nullptr,FALSE);
+    static Caption* drop_target(POINT screen) {
+        HWND frame = GetAncestor(WindowFromPoint(screen), GA_ROOT);
+        for (auto* caption : captions) {
+            if (caption->parent != frame || caption->frame_collapsed) continue;
+            POINT local = screen;
+            ScreenToClient(caption->child, &local);
+            if (local.y >= 0 && local.y < caption->height && local.x >= caption->tab_left * caption->scale &&
+                local.x < (caption->tab_left + caption->viewport) * caption->scale) return caption;
         }
+        return nullptr;
+    }
+
+    void set_drop_slot(int slot) {
+        if (drop_slot == slot) return;
+        drop_slot = slot;
+        layout_tab_slots();
+    }
+
+    void collapse_frame() {
+        HRGN saved = CreateRectRgn(0, 0, 0, 0);
+        if (saved && GetWindowRgn(parent, saved) == ERROR) {
+            DeleteObject(saved);
+            saved = nullptr;
+        }
+        HRGN empty = CreateRectRgn(0, 0, 0, 0);
+        // Keep native capture on the title bar until the queued drop is accepted.
+        if (empty && SetWindowRgn(parent, empty, TRUE)) {
+            original_region = saved;
+            frame_collapsed = true;
+        } else {
+            if (empty) DeleteObject(empty);
+            if (saved) DeleteObject(saved);
+        }
+    }
+
+    void restore_frame() {
+        if (!frame_collapsed) return;
+        HRGN saved = original_region;
+        frame_collapsed = false;
+        original_region = nullptr;
+        if (!SetWindowRgn(parent, saved, TRUE) && saved) DeleteObject(saved);
+    }
+
+    void finish_drop(unsigned long long document) {
+        if (pending_drop != document) return;
+        pending_drop = 0;
+        restore_frame();
+        set_drop_slot(-1);
     }
 
     static LRESULT CALLBACK ghost_procedure(HWND window,UINT message,WPARAM wparam,LPARAM lparam) {
@@ -478,7 +501,7 @@ struct Caption {
         if(message==WM_PAINT && self) {
             PAINTSTRUCT ps{};auto dc=BeginPaint(window,&ps);RECT rect{};GetClientRect(window,&rect);
             {Graphics graphics(dc);graphics.Clear(self->selected());}
-            self->text(dc,self->drag_title,12,0,self->tab_width-24,self->height/self->scale,true);
+            self->text(dc,self->drag_title,12,0,rect.right/self->scale-24,rect.bottom/self->scale,true);
             EndPaint(window,&ps);return 0;
         }
         return DefWindowProcW(window,message,wparam,lparam);
@@ -488,39 +511,65 @@ struct Caption {
         if(!dragging) return;
         if(GetAsyncKeyState(VK_ESCAPE)&0x8000) {cancel_drag();return;}
         POINT screen{};if(event_screen) screen=*event_screen;else GetCursorPos(&screen);
-        Caption* target=drop_target(screen,ghost);
+        Caption* target=drop_target(screen);
         POINT local=screen;ScreenToClient(child,&local);
         // Keep small vertical hand movements attached to the source strip.
-        if(!target && local.x>=tab_left*scale && local.x<(plus_x+40)*scale &&
+        if(!frame_collapsed && !target && local.x>=tab_left*scale && local.x<(tab_left+viewport+40)*scale &&
             local.y>=-15*scale && local.y<height+15*scale) target=this;
+        bool was_attached=attached_drag;
         attached_drag=target==this;
+        if(was_attached!=attached_drag) layout_tab_slots();
         if(attached_drag && !tabs.empty()) {
             drag_x=std::clamp(local.x/scale-anchor_x/scale,tab_left,tab_left+(tabs.size()-1)*tab_width);
             drag_slot=std::clamp(int(std::floor((drag_x-tab_left)/tab_width+0.5f)),0,int(tabs.size())-1);
         }
+        Caption* destination = target == this ? nullptr : target;
+        for (auto* caption : captions) {
+            if (caption != destination && !caption->pending_drop) caption->set_drop_slot(-1);
+        }
+        POINT position{screen.x-anchor_x,screen.y-anchor_y};
+        int width=source_tab_width, preview_height=height;
+        if(destination) {
+            POINT hit=screen;ScreenToClient(destination->child,&hit);
+            float dx=std::clamp(destination->viewport/(destination->tabs.size()+1),0.01f,280.0f);
+            width=std::max(1,int(std::lround(dx*destination->scale)));
+            float anchor=float(MulDiv(anchor_x,width,source_tab_width))/destination->scale;
+            int count=int(destination->tabs.size());
+            float left=std::clamp(hit.x/destination->scale-anchor,destination->tab_left,destination->tab_left+dx*count);
+            int slot=std::clamp(int(std::lround((left-destination->tab_left)/dx)),0,count);
+            destination->incoming_x=left;
+            destination->set_drop_slot(slot);
+            position={int(std::lround(left*destination->scale)),0};
+            ClientToScreen(destination->child,&position);
+            preview_height=destination->height;
+        }
         if(ghost) {
             if(attached_drag) ShowWindow(ghost,SW_HIDE);
-            else SetWindowPos(ghost,HWND_TOPMOST,screen.x-anchor_x,screen.y-anchor_y,
-                0,0,SWP_NOSIZE|SWP_NOACTIVATE|SWP_SHOWWINDOW);
-        }
-        clear_drop_markers();
-        if(target && target!=this) {
-            target->drop_slot=target->insertion_slot(screen);
-            InvalidateRect(target->child,nullptr,FALSE);
+            else {
+                if(width!=ghost_width || preview_height!=ghost_height) {
+                    SetWindowRgn(ghost,CreateRoundRectRgn(0,0,width,preview_height,int(14*scale),int(14*scale)),FALSE);
+                    ghost_width=width;ghost_height=preview_height;
+                }
+                SetWindowPos(ghost,HWND_TOPMOST,position.x,position.y,width,preview_height,SWP_NOACTIVATE|SWP_SHOWWINDOW);
+            }
         }
         arrange_tabs();
     }
 
     void start_drag(const POINT& screen) {
         dragging=true;
+        attached_drag=true;
+        source_tab_width=std::max(1,int(tab_width*scale));
         WNDCLASSW cls{};cls.lpfnWndProc=ghost_procedure;cls.hInstance=GetModuleHandleW(nullptr);
+        cls.style=CS_HREDRAW|CS_VREDRAW;
         cls.lpszClassName=L"MarkdownViewer.TabDragPreview";RegisterClassW(&cls);
         ghost=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE|WS_EX_LAYERED|WS_EX_TRANSPARENT,
-            cls.lpszClassName,L"",WS_POPUP,0,0,int(tab_width*scale),height,
+            cls.lpszClassName,L"",WS_POPUP,0,0,source_tab_width,height,
             nullptr,nullptr,cls.hInstance,this);
         if(ghost) {
             SetLayeredWindowAttributes(ghost,0,220,LWA_ALPHA);
-            SetWindowRgn(ghost,CreateRoundRectRgn(0,0,int(tab_width*scale),height,int(14*scale),int(14*scale)),FALSE);
+            ghost_width=0;ghost_height=0;
+            if(tabs.size()==1) collapse_frame();
         }
         update_tab_tip(-1);
         SetTimer(child,1,15,nullptr);
@@ -530,26 +579,34 @@ struct Caption {
     void cancel_drag(bool focus_reader=true) {
         // Clear state before ReleaseCapture, which synchronously sends WM_CAPTURECHANGED.
         bool restore_focus=pressed_id!=0;
+        bool packed_source=dragging && !attached_drag;
         dragging=false;attached_drag=false;pressed_id=0;pressed_action=-1;drag_slot=-1;
         KillTimer(child,1);
         HWND old_ghost=ghost;ghost=nullptr;
         if(old_ghost) DestroyWindow(old_ghost);
-        clear_drop_markers();
+        if (!pending_drop) restore_frame();
+        for (auto* caption : captions) if (!caption->pending_drop) caption->set_drop_slot(-1);
         if(GetCapture()==child) ReleaseCapture();
-        arrange_tabs();
+        if(packed_source) layout_tab_slots();
+        else arrange_tabs();
         if(restore_focus && focus_reader) callback(context,8,0);
     }
 
     void finish_drag(const POINT& screen) {
         update_drag(&screen);
-        Caption* target=drop_target(screen,ghost);
+        if (!dragging) return;
+        Caption* target=drop_target(screen);
         if(attached_drag) target=this;
         int from=pressed_index(),slot=drag_slot;
-        unsigned insertion=unsigned(target?target->insertion_slot(screen):0);
+        unsigned insertion=unsigned(target && target->drop_slot>=0?target->drop_slot:0);
         if(target==this && from>=0) insertion=unsigned(slot>from?slot+1:slot);
+        if (target != this) {
+            pending_drop = pressed_id;
+            if (target) target->pending_drop = pressed_id;
+        }
         TabDrop drop{pressed_id,target?target->parent:nullptr,
-            insertion,screen.x,screen.y,anchor_x,anchor_y};
-        cancel_drag();
+            insertion,screen.x,screen.y,anchor_x+int(std::lround(tab_left*scale)),anchor_y};
+        cancel_drag(target==this);
         if(target==this && from>=0 && slot>=0 && from!=slot) {
             auto item=std::move(tabs[from]);tabs.erase(tabs.begin()+from);
             tabs.insert(tabs.begin()+slot,std::move(item));
@@ -1360,7 +1417,7 @@ struct Caption {
                     }
                     if(before!=button) InvalidateRect(hwnd,nullptr,FALSE);
                 }
-                if(button) {self->update_tab_tip(-1,button);return 0;}
+                if(button && GetCapture()!=hwnd) {self->update_tab_tip(-1,button);return 0;}
                 float x=GET_X_LPARAM(lparam)/self->scale,y=GET_Y_LPARAM(lparam)/self->scale;
                 if(self->pressed_id && self->pressed_action>=0 && GetCapture()==hwnd) {
                     if(!(wparam&MK_LBUTTON)) {self->cancel_drag();return 0;}
@@ -1385,7 +1442,7 @@ struct Caption {
                 InvalidateRect(hwnd,nullptr,FALSE);return 0;
             }
             if(message==WM_TIMER && wparam==1) {
-                if(self->dragging) self->update_drag();
+                if(self->dragging && (GetAsyncKeyState(VK_ESCAPE)&0x8000)) self->cancel_drag();
                 else self->arrange_tabs();
                 return 0;
             }
@@ -1463,7 +1520,7 @@ void* md_caption_create(HWND parent,Callback callback,void* context,long* error)
     catch(...){*error=E_FAIL;return nullptr;}
 }
 void md_caption_destroy(Caption* self) noexcept {
-    if(self){RemoveWindowSubclass(self->parent,Caption::parent_procedure,reinterpret_cast<UINT_PTR>(self));self->close_panel(false);self->cancel_drag();captions.erase(std::remove(captions.begin(),captions.end(),self),captions.end());
+    if(self){RemoveWindowSubclass(self->parent,Caption::parent_procedure,reinterpret_cast<UINT_PTR>(self));self->close_panel(false);self->restore_frame();self->cancel_drag();captions.erase(std::remove(captions.begin(),captions.end(),self),captions.end());
         if(self->tab_tip) DestroyWindow(self->tab_tip);DestroyWindow(self->child);delete self;}
 }
 int md_caption_resize(Caption* self) noexcept {
@@ -1483,6 +1540,13 @@ void md_caption_add(Caption* self,unsigned kind,unsigned long long id,const wcha
 }
 void md_caption_commit(Caption* self) noexcept {
     try {
+        if (self->drop_slot >= 0 && self->pending_drop &&
+            std::any_of(self->tabs.begin(),self->tabs.end(),
+                [self](const Item& item){return item.id==self->pending_drop;})) {
+            float x=self->incoming_x;
+            self->tab_motion[self->pending_drop]={x,x,0};
+            self->drop_slot=-1;
+        }
         for(auto it=self->tab_motion.begin();it!=self->tab_motion.end();) {
             if(std::none_of(self->tabs.begin(),self->tabs.end(),[&](const Item& item){return item.id==it->first;})) it=self->tab_motion.erase(it);
             else ++it;
@@ -1498,6 +1562,9 @@ void md_caption_commit(Caption* self) noexcept {
         }
         self->layout();
     }catch(...){}
+}
+void md_caption_finish_drop(Caption* self, unsigned long long document) noexcept {
+    try { self->finish_drop(document); } catch(...) {}
 }
 bool md_caption_take_drop(unsigned long long token,TabDrop* drop) noexcept {
     auto item=pending_drops.find(token);
